@@ -2,11 +2,17 @@
 var grantResult = new ReactiveVar(null);
 var tokenResult = new ReactiveVar(null);
 var getUserIdResult = new ReactiveVar(null);
+var clientCount = new ReactiveVar(null);
 
-// subscribe to our authorization codes and refresh tokens.
 Template.authorize.onCreated(function() {
+    // subscribe to our authorization codes and refresh tokens.
     oAuth2Server.subscribeTo.authCode();
     oAuth2Server.subscribeTo.refreshTokens();
+
+    // get teh client count.
+    Meteor.call('clientCount', function(err, cnt) {
+        clientCount.set(cnt);
+    });
 });
 
 Template.authorize.helpers({
@@ -31,12 +37,39 @@ Template.authorize.helpers({
     },
     refreshTokens: function() {
         return oAuth2Server.collections.refreshToken.find({});
+    },
+    clientCount: function() {
+        return clientCount.get();
     }
 });
 
 Template.authorize.events({
-    // Step 3.
-    // user clicks the authorize button.
+    /**
+     * CONFIG FLOW - Step C1.1
+     * Create an authorized client.
+     */
+    'submit #addClientForm': function (){
+        var newClient = {
+            active: true,
+            clientId: $('#addClientForm input[name="clientId"]').val(),
+            redirectUri: $('#addClientForm input[name="redirectUri"]').val(),
+            clientSecret: $('#addClientForm input[name="clientSecret"]').val(),
+            clientName: $('#addClientForm input[name="clientName"]').val()
+        };
+
+        Meteor.call('addClient', newClient, function() {
+            Meteor.call('clientCount', function(err, cnt) {
+                clientCount.set(cnt);
+            });
+        });
+
+        return false;
+    },
+
+    /**
+     * AUTH FLOW - Step A5.1
+     * user clicks the authorize button.
+     */
     'click button.authorize': function() {
         console.log('Authorize button clicked.');
         var urlParams = getUrlParams();
@@ -51,26 +84,31 @@ Template.authorize.events({
             function(err, result) {
                 console.log(err, result);
 
-                // Step 4
                 // give the UI something to display.
                 grantResult.set(result);
             }
         );
     },
 
+    /**
+     * This entire code block is for testing purposes only. The functionality here is generally
+     * implemented on the client application and this action tends to be server-to-server.
+     */
     'click button.testLocalTokens': function() {
         var result = grantResult.get();
         var urlParams = getUrlParams();
 
-        // Step 5.
-        // we have an authorization code. Now get a token.
+        /**
+         * AUTH FLOW - Step A5
+         * We have an authorization code. Now get a token.
+         */
         if (result.success) {
             console.log('POST');
             HTTP.post(
                 Meteor.absoluteUrl('/oauth/token'),
                 {
                     headers: {
-                        "Content-type": "application/x-www-form-urlencoded"
+                        'Content-type': 'application/x-www-form-urlencoded'
                     },
                     params: {
                         grant_type: 'authorization_code',
@@ -80,10 +118,16 @@ Template.authorize.events({
                     }
                 },
                 function(err, result) {
+                    /**
+                     * AUTH FLOW - Step A6
+                     */
                     tokenResult.set(result.data);
 
-                    // Step 6.
-                    // we have an access token. Get the user from the REST service.
+                    /**
+                     * AUTH FLOW - Step A7.
+                     * we have an access token. Get the user from the REST service. This service is defined
+                     * in the /server/rest.js.
+                     */
                     HTTP.get(
                         Meteor.absoluteUrl('/api/getUserId'),
                         {
@@ -96,9 +140,17 @@ Template.authorize.events({
                             getUserIdResult.set(result.data);
                         }
                     );
-                }
-            );
-        }
+                } // function
+            ); // HTTP.post
+        } // if
+    }, // function
+
+    'click button.deleteAllClients': function() {
+        Meteor.call('deleteAllClients', function() {
+            Meteor.call('clientCount', function(err, cnt) {
+                clientCount.set(cnt);
+            });
+        });
     }
 });
 

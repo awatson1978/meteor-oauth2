@@ -12,10 +12,12 @@
  */
 JsonRoutes.Middleware.use(
     '/api/*',
-    oAuth2Server.oauthserver.authorise()
+    oAuth2Server.oauthserver.authorise()   // OAUTH FLOW - A7.1
 );
 
 /**
+ * OAUTH FLOW - A7.2
+ *
  * Here is an example of querying for and returning data. At this point, the api path
  * has been validated by the oAuth2 server package. So the code can execute
  * un-encumbered.
